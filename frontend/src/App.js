@@ -11,7 +11,6 @@ const App = () => {
     { username: localStorage.getItem('username'), loggedIn: true } :
     { username: "", loggedIn: false };
   const [user, setUser] = useState(INITIAL_STATE);
-  console.log(user);
 
   const login = () => {
     setUser({ username: localStorage.getItem('username'), loggedIn: true });

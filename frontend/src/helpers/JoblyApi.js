@@ -31,8 +31,8 @@ class JoblyApi {
     const data = formatData(formData);
 
     let res = await this.request(endpoint, data, 'post');
-    if (res.token) {
-      localStorage.setItem("_token", res.token);
+    if (res._token) {
+      localStorage.setItem("_token", res._token);
       localStorage.setItem("username", data.username);
     }
     return res;
