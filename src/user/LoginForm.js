@@ -49,7 +49,7 @@ const LoginForm = () => {
   return (
     <Container>
       <Row>
-        <Col md={{span: 8, offset: 2}}>
+        <Col md={{ span: 8, offset: 2 }}>
           <div className='LoginForm-btn'>
             <ButtonGroup>
               <Button active={existingUser} onClick={() => setExistingUser(true)} variant='primary'>Login</Button>
@@ -68,7 +68,9 @@ const LoginForm = () => {
               <Form.Control type="password" onChange={handleChange} value={formData.password} name="password" />
             </Form.Group>
             {
-              existingUser ? null :
+              !existingUser &&
+              <div>
+                <h5>This App is for demonstration only - Please do not enter any personal information</h5>
                 <div>
                   <Form.Group>
                     <Form.Label className='LoginForm-label'>First Name</Form.Label>
@@ -85,11 +87,11 @@ const LoginForm = () => {
                     <Form.Control onChange={handleChange} value={formData.email} name="email" />
                   </Form.Group>
                 </div>
+              </ div>
             }
             {
-              errMsg ?
-                errMsg.map(msg => <Alert key={uuid()} variant="danger">{createErrorMsg(msg)}</Alert>) :
-                null
+              errMsg &&
+                errMsg.map(msg => <Alert key={uuid()} variant="danger">{createErrorMsg(msg)}</Alert>)
             }
             <div className='LoginForm-btn'>
               <Button variant="primary" type="submit">Submit</Button>
