@@ -106,6 +106,7 @@ function buildJobFilter(queries) {
   }
 
   let sqlQueryString = `SELECT
+  id,
   title,
   company_handle,
   salary, 

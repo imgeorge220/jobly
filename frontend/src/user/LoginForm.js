@@ -1,11 +1,11 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { Form, Container, Row, Col, ButtonGroup, Button, Alert } from 'react-bootstrap';
 import { useHistory } from 'react-router-dom';
+import { v4 as uuid } from 'uuid';
 import JoblyApi from "../helpers/JoblyApi";
 import UserContext from './UserContext';
 import { createErrorMsg } from '../helpers/ApiHelpers';
 import './LoginForm.css';
-
 
 const LoginForm = () => {
   const { user, login } = useContext(UserContext);
@@ -88,7 +88,7 @@ const LoginForm = () => {
             }
             {
               errMsg ?
-                errMsg.map(msg => <Alert variant="danger">{createErrorMsg(msg)}</Alert>) :
+                errMsg.map(msg => <Alert key={uuid()} variant="danger">{createErrorMsg(msg)}</Alert>) :
                 null
             }
             <div className='LoginForm-btn'>
