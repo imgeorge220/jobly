@@ -4,6 +4,8 @@ const express = require("express");
 const ExpressError = require("./helpers/expressError");
 const morgan = require("morgan");
 const app = express();
+const cors = require("cors");
+app.use(cors());
 const { authenticateJWT } = require("./helpers/authMiddleware")
 
 const companyRoutes = require('./routes/companies');

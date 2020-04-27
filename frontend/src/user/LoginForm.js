@@ -37,7 +37,7 @@ const LoginForm = () => {
 
   const handleSubmit = async evt => {
     evt.preventDefault();
-    const endpoint = existingUser ? "login" : "users";
+    const endpoint = existingUser ? "users/login" : "users";
     const resp = await JoblyApi.getToken(formData, endpoint);
     resp.error ? setErrMsg(resp.error) : login();
     setFormData(oldFormData => ({
