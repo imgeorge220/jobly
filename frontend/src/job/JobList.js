@@ -25,14 +25,17 @@ const JobList = () => {
     getJobs(searchTerm);
   }
 
+  const jobsJSX = jobs.length
+    ? jobs.map(job => <JobCard key={job.id} job={job} />)
+    : <h3>No companies match that search. Please try again</h3>
+
+
   return (
     <Container>
       <Row>
         <Col md={{ span: 8, offset: 2 }}>
           <SearchBar handleSearch={searchJobs} />
-          {
-            jobs.map(job => <JobCard key={job.id} job={job} />)
-          }
+          {jobsJSX}
         </Col>
       </Row>
     </Container>

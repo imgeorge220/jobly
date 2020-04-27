@@ -117,7 +117,9 @@ function buildJobFilter(queries, username) {
   LEFT OUTER JOIN jobs AS j on j.company_handle = c.handle
   LEFT OUTER JOIN applications AS a on a.job_id = id AND username = $1
   ${whereStatement}
-  ORDER BY date_posted DESC`
+  ORDER BY 
+  a.state,
+  j.date_posted DESC`
 
   return { sqlQueryString, values };
 }

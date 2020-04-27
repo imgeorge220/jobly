@@ -19,11 +19,7 @@ class Job {
       filterParams.sqlQueryString,
       filterParams.values
     );
-
-    if (results.rows.length === 0) {
-      throw new ExpressError('No jobs found', 404);
-    }
-
+    
     let jobs = results.rows;
 
     return { jobs };

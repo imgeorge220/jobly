@@ -24,16 +24,12 @@ class Company {
       filterParams.values
     );
 
-    if (results.rows.length === 0) {
-      throw new ExpressError('No companies found', 404);
-    }
-
     let companies = results.rows;
 
     return { companies };
   }
 
-  static async getByHandle(handle) {
+  static async getByHandle(handle, username) {
     const results = await db.query(
       `SELECT
           handle,
@@ -49,10 +45,10 @@ class Company {
           a.state
         FROM companies
         LEFT JOIN jobs j
-        LEFT OUTER JOIN applications AS a on a.job_id = id
+        LEFT OUTER JOIN applications AS a on a.job_id = id AND username = $2
         ON handle = j.company_handle
         WHERE handle = $1`,
-      [handle]
+      [handle, username]
     );
 
     const company = results.rows[0];

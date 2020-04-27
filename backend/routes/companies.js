@@ -22,7 +22,7 @@ router.get("/", ensureLoggedIn, async (req, res, next) => {
 
 router.get("/:handle", ensureLoggedIn, async (req, res, next) => {
   try {
-    let company = await Company.getByHandle(req.params.handle);
+    let company = await Company.getByHandle(req.params.handle, req.user.username);
     return res.json(company);
   }
   catch (err) {

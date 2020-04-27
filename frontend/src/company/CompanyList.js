@@ -24,12 +24,16 @@ const CompanyList = () => {
     getCompanies(searchTerm);
   }
 
+  const companiesJSX = companies.length 
+    ? companies.map(company => <CompanyCard key={company.handle} company={company} />)
+    : <h3>No companies match that search. Please try again</h3>
+
   return (
     <Container>
       <Row>
         <Col sm={{ span: 10, offset: 1 }} md={{ span: 8, offset: 2 }}>
           <SearchBar handleSearch={searchCompanies} />
-            {companies.map(company => <CompanyCard key={company.handle} company={company} />)}
+            {companiesJSX}
         </Col>
       </Row>
     </Container>
