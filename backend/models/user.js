@@ -1,173 +1,174 @@
-const db = require("../db");
-const bcrypt = require("bcrypt");
-const partialUpdate = require("../helpers/partialUpdate");
+const bcrypt = require('bcrypt');
+const jwt = require("jsonwebtoken");
 
-const BCRYPT_WORK_FACTOR = 10;
+const db = require('../db');
+const sqlForPartialUpdate = require('../helpers/partialUpdate');
+const ExpressError = require('../helpers/expressError');
+const { BCRYPT_WORK_FACTOR, SECRET_KEY } = require('../config');
 
-
-/** Related functions for users. */
 
 class User {
+  constructor({ username, password, first_name, last_name, email, photo_url, is_admin }) {
+    this.username = username;
+    this.password = password;
+    this.first_name = first_name;
+    this.last_name = last_name;
+    this.email = email;
+    this.photo_url = photo_url;
+    this.is_admin = is_admin || false;
+  }
 
-  /** authenticate user with username, password. Returns user or throws err. */
+  static async all() {
 
-  static async authenticate(data) {
-    // try to find the user first
-    const result = await db.query(
-        `SELECT username, 
-                password, 
-                first_name, 
-                last_name, 
-                email, 
-                photo_url, 
-                is_admin
-          FROM users 
-          WHERE username = $1`,
-        [data.username]
+    const results = await db.query(
+      `SELECT
+        username,
+        first_name,
+        last_name,
+        email
+        FROM users`
     );
 
-    const user = result.rows[0];
+    let users = results.rows;
 
-    if (user) {
-      // compare hashed password to a new hash from password
-      const isValid = await bcrypt.compare(data.password, user.password);
-      if (isValid) {
-        return user;
-      }
-    }
-
-    const invalidPass = new Error("Invalid Credentials");
-    invalidPass.status = 401;
-    throw invalidPass;
+    return { users };
   }
 
-  /** Register user with data. Returns new user data. */
-
-  static async register(data) {
-    const duplicateCheck = await db.query(
-        `SELECT username 
-            FROM users 
-            WHERE username = $1`,
-        [data.username]
+  static async getByUsername(username) {
+    const results = await db.query(
+      `SELECT
+        u.username,
+        first_name,
+        last_name,
+        email,
+        photo_url,
+        a.state,
+        a.created_at,
+        j.title,
+        j.company_handle
+        FROM users u
+        LEFT JOIN applications a ON u.username = a.username
+        LEFT JOIN jobs j ON j.id = a.job_id
+        WHERE u.username = $1`,
+      [username]
     );
 
-    if (duplicateCheck.rows[0]) {
-      const err = new Error(
-          `There already exists a user with that username`);
-      err.status = 409;
-      throw err;
+    const userInfo = results.rows[0];
+    if (!userInfo) {
+      throw new ExpressError('User not found!', 404);
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, BCRYPT_WORK_FACTOR);
+    const jobs = results.rows[0].title ? results.rows.map(r => ({
+      title: r.title,
+      company_handle: r.company_handle,
+      state: r.state,
+      created_at: r.created_at
+    })) : [];
 
-    const result = await db.query(
-        `INSERT INTO users 
-            (username, password, first_name, last_name, email, photo_url) 
-          VALUES ($1, $2, $3, $4, $5, $6) 
-          RETURNING username, password, first_name, last_name, email, photo_url`,
-        [
-          data.username,
-          hashedPassword,
-          data.first_name,
-          data.last_name,
-          data.email,
-          data.photo_url
-        ]);
-
-    return result.rows[0];
+    const user = {
+      username: userInfo.username,
+      first_name: userInfo.first_name,
+      last_name: userInfo.last_name,
+      email: userInfo.email,
+      photo_url: userInfo.photo_url,
+      jobs: jobs
+    }
+    return { user }
   }
 
-  /** Find all users. */
+  static async update(username, items) {
 
-  static async findAll() {
-    const result = await db.query(
-        `SELECT username, first_name, last_name, email
-          FROM users
-          ORDER BY username`);
-
-    return result.rows;
-  }
-
-  /** Given a username, return data about user. */
-
-  static async findOne(username) {
-    const userRes = await db.query(
-        `SELECT username, first_name, last_name, email, photo_url 
-            FROM users 
-            WHERE username = $1`,
-        [username]);
-
-    const user = userRes.rows[0];
-
-    if (!user) {
-      const error = new Error(`There exists no user '${username}'`);
-      error.status = 404;   // 404 NOT FOUND
-      throw error;
+    if (items.password) {
+      items.password = await bcrypt.hash(items.password, BCRYPT_WORK_FACTOR);
     }
 
-    const userJobsRes = await db.query(
-        `SELECT j.id, j.title, j.company_handle, a.state 
-           FROM applications AS a
-             JOIN jobs AS j ON j.id = a.job_id
-           WHERE a.username = $1`,
-        [username]);
+    let queryParams = sqlForPartialUpdate("users", items, "username", username);
 
-    user.jobs = userJobsRes.rows;
-    return user;
-  }
-
-  /** Update user data with `data`.
-   *
-   * This is a "partial update" --- it's fine if data doesn't contain
-   * all the fields; this only changes provided ones.
-   *
-   * Return data for changed user.
-   *
-   */
-
-  static async update(username, data) {
-    if (data.password) {
-      data.password = await bcrypt.hash(data.password, BCRYPT_WORK_FACTOR);
-    }
-
-    let {query, values} = partialUpdate(
-        "users",
-        data,
-        "username",
-        username
+    const update = await db.query(
+      queryParams.query,
+      queryParams.values
     );
 
-    const result = await db.query(query, values);
-    const user = result.rows[0];
-
-    if (!user) {
-      let notFound = new Error(`There exists no user '${username}`);
-      notFound.status = 404;
-      throw notFound;
+    if (update.rows.length === 0) {
+      throw new ExpressError('User does not exist', 404);
     }
 
-    delete user.password;
-    delete user.is_admin;
+    let { password, is_admin, ...user } = update.rows[0];
 
-    return result.rows[0];
+    return { user };
   }
 
-  /** Delete given user from database; returns undefined. */
+  async addToDb() {
+    const hashedPassword = await bcrypt.hash(this.password, BCRYPT_WORK_FACTOR);
 
-  static async remove(username) {
-      let result = await db.query(
-              `DELETE FROM users 
-                WHERE username = $1
-                RETURNING username`,
-              [username]);
+    await db.query(
+      `INSERT INTO users
+        (username,
+        password,
+        first_name,
+        last_name,
+        email,
+        photo_url)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING
+        username,
+        first_name,
+        last_name,
+        email,
+        photo_url`,
+      [this.username,
+        hashedPassword,
+      this.first_name,
+      this.last_name,
+      this.email,
+      this.photo_url]
+    );
 
-    if (result.rows.length === 0) {
-      let notFound = new Error(`There exists no user '${username}'`);
-      notFound.status = 404;
-      throw notFound;
+    delete this.password;
+  }
+
+  createToken() {
+    let payload = { username: this.username, is_admin: this.is_admin };
+    let token = jwt.sign(payload, SECRET_KEY);
+
+    return token;
+  }
+
+  static async login(credentials) {
+    const user = await db.query(
+      `SELECT
+        username,
+        password,
+        is_admin
+        FROM users
+        WHERE username = $1`,
+      [credentials.username]
+    );
+
+    if (!user.rows[0]) {
+      throw new ExpressError("Invalid username/password", 401);
     }
+
+    if (await bcrypt.compare(credentials.password, user.rows[0].password)) {
+      return new User(user.rows[0]);
+    }
+    throw new ExpressError("Invalid username/password", 401);
   }
+
+  static async deleteFromDb(username) {
+    const deleted = await db.query(
+      `DELETE FROM users
+        WHERE username = $1`,
+      [username]
+    );
+
+    if (deleted.rowCount === 0) {
+      throw new ExpressError('User does not exist', 404);
+    }
+
+    return { message: "User successfully deleted" };
+  }
+
 }
-
 
 module.exports = User;

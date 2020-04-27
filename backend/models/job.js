@@ -1,159 +1,145 @@
-const db = require("../db");
-const sqlForPartialUpdate = require("../helpers/partialUpdate");
+const db = require('../db');
+const sqlForPartialUpdate = require('../helpers/partialUpdate');
+const ExpressError = require('../helpers/expressError');
+const { buildJobFilter } = require("../helpers/buildFilterQuery");
 
-
-/** Related functions for companies. */
 
 class Job {
-
-  /** Find all jobs (can filter on terms in data). */
-
-  static async findAll(data, username) {
-    console.log(data);
-    let baseQuery = `
-      SELECT id, title, company_handle, salary, equity, a.state 
-      FROM jobs 
-        LEFT OUTER JOIN applications AS a on a.job_id = id AND a.username = $1`;
-    let whereExpressions = [];
-    let queryValues = [username];
-
-    // For each possible search term, add to whereExpressions and
-    // queryValues so we can generate the right SQL
-
-    if (data.min_salary) {
-      queryValues.push(+data.min_employees);
-      whereExpressions.push(`min_salary >= $${queryValues.length}`);
-    }
-
-    if (data.max_equity) {
-      queryValues.push(+data.max_employees);
-      whereExpressions.push(`min_equity >= $${queryValues.length}`);
-    }
-
-    if (data.search) {
-      queryValues.push(`%${data.search}%`);
-      whereExpressions.push(`title ILIKE $${queryValues.length}`);
-    }
-
-    if (whereExpressions.length > 0) {
-      baseQuery += " WHERE ";
-    }
-
-    // Finalize query and return results
-
-    let finalQuery = baseQuery + whereExpressions.join(" AND ");
-    const jobsRes = await db.query(finalQuery, queryValues);
-    return jobsRes.rows;
+  constructor({ title, salary, equity, company_handle }) {
+    this.title = title;
+    this.salary = salary;
+    this.equity = equity;
+    this.company_handle = company_handle;
   }
 
-  /** Given a job id, return data about job. */
+  static async allByQueries(queries) {
+    let filterParams = buildJobFilter(queries);
 
-  static async findOne(id) {
-    const jobRes = await db.query(
-        `SELECT id, title, salary, equity, company_handle 
-             FROM jobs 
-             WHERE id = $1`,
-        [id]);
+    const results = await db.query(
+      filterParams.sqlQueryString,
+      filterParams.values
+    );
 
-    const job = jobRes.rows[0];
+    if (results.rows.length === 0) {
+      throw new ExpressError('No jobs found', 404);
+    }
+
+    let jobs = results.rows;
+
+    return { jobs };
+  }
+
+  static async getByID(id) {
+    const results = await db.query(
+      `SELECT
+          id,
+          title,
+          salary,
+          equity,
+          date_posted,
+          c.handle,
+          c.name,
+          c.description,
+          c.num_employees,
+          c.logo_url
+        FROM jobs
+        JOIN companies c
+        ON company_handle = c.handle
+        WHERE id = $1`,
+      [id]
+    );
+
+    const job = results.rows[0];
 
     if (!job) {
-      const error = new Error(`There exists no job '${id}'`);
-      error.status = 404;   // 404 NOT FOUND
-      throw error;
+      throw new ExpressError('Job not found!', 404);
     }
 
-    const companiesRes = await db.query(
-        `SELECT name, num_employees, description, logo_url 
-          FROM companies 
-          WHERE handle = $1`,
-        [job.company_handle]
-    );
-
-    job.company = companiesRes.rows[0];
-
-    return job;
-  }
-
-  /** Create a job (from data), update db, return new job data. */
-
-  static async create(data) {
-    const result = await db.query(
-        `INSERT INTO jobs (title, salary, equity, company_handle) 
-             VALUES ($1, $2, $3, $4) 
-             RETURNING id, title, salary, equity, company_handle`,
-        [data.title, data.salary, data.equity, data.company_handle]
-    );
-
-    return result.rows[0];
-  }
-
-  /** Update job data with `data`.
-   *
-   * This is a "partial update" --- it's fine if data doesn't contain
-   * all the fields; this only changes provided ones.
-   *
-   * Return data for changed job.
-   *
-   */
-
-  static async update(id, data) {
-    let {query, values} = sqlForPartialUpdate(
-        "jobs",
-        data,
-        "id",
-        id
-    );
-
-    const result = await db.query(query, values);
-    const job = result.rows[0];
-
-    if (!job) {
-      let notFound = new Error(`There exists no job '${id}`);
-      notFound.status = 404;
-      throw notFound;
-    }
-
-    return job;
-  }
-
-  /** Delete given job from database; returns undefined. */
-
-  static async remove(id) {
-    const result = await db.query(
-        `DELETE FROM jobs 
-            WHERE id = $1 
-            RETURNING id`,
-        [id]);
-
-    if (result.rows.length === 0) {
-      let notFound = new Error(`There exists no job '${id}`);
-      notFound.status = 404;
-      throw notFound;
-    }
-  }
-
-  /** Apply for job: update db, returns undefined. */
-
-  static async apply(id, username, state) {
-      const result = await db.query(
-          `SELECT id 
-            FROM jobs 
-            WHERE id = $1`,
-          [id]);
-
-      if (result.rows.length === 0) {
-        let notFound = new Error(`There exists no job '${id}`);
-        notFound.status = 404;
-        throw notFound;
+    return {
+      job: {
+        id: job.id,
+        title: job.title,
+        salary: job.salary,
+        equity: job.equity,
+        date_posted: job.date_posted,
+        company: {
+          handle: job.handle,
+          name: job.name,
+          description: job.description,
+          num_employees: job.num_employees,
+          logo_url: job.logo_url
+        }
       }
-
-      await db.query(
-          `INSERT INTO applications (job_id, username, state) 
-            VALUES ($1, $2, $3)`,
-          [id, username, state]);
+    };
   }
-}
 
+
+  static async update(id, items) {
+    let queryParams = sqlForPartialUpdate("jobs", items, "id", id);
+
+    const update = await db.query(
+      queryParams.query,
+      queryParams.values
+    );
+
+    if (update.rows.length === 0) {
+      throw new ExpressError('Job does not exist', 404);
+    }
+
+    let job = update.rows[0];
+
+    return { job };
+  }
+
+  async addToDb() {
+    const job = (await db.query(
+      `INSERT INTO jobs
+          (title,
+          salary,
+          equity,
+          company_handle)
+        VALUES ($1, $2, $3, $4)
+        RETURNING
+          id,
+          title,
+          salary,
+          equity,
+          company_handle,
+          date_posted`,
+      [this.title,
+      this.salary,
+      this.equity,
+      this.company_handle]
+    )).rows[0];
+
+    this.id = job.id;
+    this.date_posted = job.date_posted;
+  }
+
+  static async deleteFromDb(id) {
+    const deleted = await db.query(
+      `DELETE FROM jobs
+        WHERE id = $1`,
+      [id]
+    );
+
+    if (deleted.rowCount === 0) {
+      throw new ExpressError('Job does not exist', 404);
+    }
+
+    return { message: "Job successfully deleted" };
+  }
+
+  static async apply(username, id, state) {
+    const update = (await db.query(
+      `INSERT INTO applications (username, job_id, state)
+      VALUES ($1, $2, $3)
+      RETURNING state`, [username, id, state]
+    )).rows[0].state;
+
+    return update;
+  }
+
+}
 
 module.exports = Job;

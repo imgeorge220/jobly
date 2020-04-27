@@ -1,104 +1,77 @@
-/** Routes for companies. */
-
 const express = require("express");
+const jsonschema = require("jsonschema");
+
 const router = new express.Router();
 
-const {adminRequired, authRequired} = require("../middleware/auth");
-
+const ExpressError = require("../helpers/expressError");
 const Company = require("../models/company");
-const {validate} = require("jsonschema");
+const { ensureLoggedIn, checkIfAdmin } = require("../helpers/authMiddleware");
 
-const {companyNewSchema, companyUpdateSchema} = require("../schemas");
+const postSchema = require("../schemas/companyPostSchema.json");
+const patchSchema = require("../schemas/companyPatchSchema.json");
 
-
-/** GET /  =>  {companies: [company, company]}  */
-
-router.get("/", authRequired, async function (req, res, next) {
+router.get("/", ensureLoggedIn, async (req, res, next) => {
   try {
-    const companies = await Company.findAll(req.query);
-    return res.json({companies});
+    let result = await Company.allByQueries(req.query);
+    return res.json(result);
   }
-
   catch (err) {
     return next(err);
   }
 });
 
-
-/** GET /[handle]  =>  {company: company} */
-
-router.get("/:handle", authRequired, async function (req, res, next) {
+router.get("/:handle", ensureLoggedIn, async (req, res, next) => {
   try {
-    const company = await Company.findOne(req.params.handle);
-    return res.json({company});
+    let company = await Company.getByHandle(req.params.handle);
+    return res.json(company);
   }
-
   catch (err) {
     return next(err);
   }
 });
 
-/** POST / {companyData} =>  {company: newCompany} */
-
-router.post("/", adminRequired, async function (req, res, next) {
+router.post("/", checkIfAdmin, async (req, res, next) => {
   try {
-    const validation = validate(req.body, companyNewSchema);
+    const validData = jsonschema.validate(req.body, postSchema);
 
-    if (!validation.valid) {
-      return next({
-        status: 400,
-        message: validation.errors.map(e => e.stack)
-      });
+    if (!validData.valid) {
+      let listOfErrors = validData.errors.map(error => error.stack);
+      throw new ExpressError(listOfErrors, 400)
     }
 
-    const company = await Company.create(req.body);
-    return res.status(201).json({company});   // 201 CREATED
-  }
+    let company = new Company(req.body);
+    await company.addToDb();
 
+    return res.status(201).json({ company });
+  }
   catch (err) {
     return next(err);
   }
 });
 
-
-/** PATCH /[handle] {companyData} => {company: updatedCompany}  */
-
-router.patch("/:handle", adminRequired, async function (req, res, next) {
+router.patch("/:handle", checkIfAdmin, async (req, res, next) => {
   try {
-    if ("handle" in req.body) {
-      return next({status: 400, message: "Not allowed"});
+    const validData = jsonschema.validate(req.body, patchSchema);
+    if (!validData.valid) {
+      let listOfErrors = validData.errors.map(error => error.stack);
+      throw new ExpressError(listOfErrors, 400)
     }
-
-    const validation = validate(req.body, companyUpdateSchema);
-    if (!validation.valid) {
-      return next({
-        status: 400,
-        message: validation.errors.map(e => e.stack)
-      });
-    }
-
-    const company = await Company.update(req.params.handle, req.body);
-    return res.json({company});
+    let result = await Company.update(req.params.handle, req.body);
+    return res.json(result);
   }
-
   catch (err) {
     return next(err);
   }
 });
 
-
-/** DELETE /[handle]  =>  {message: "Company deleted"}  */
-
-router.delete("/:handle", adminRequired, async function (req, res, next) {
+router.delete("/:handle", checkIfAdmin, async (req, res, next) => {
   try {
-    await Company.remove(req.params.handle);
-    return res.json({message: "Company deleted"});
+    let result = await Company.deleteFromDb(req.params.handle);
+    return res.json(result);
   }
-
   catch (err) {
     return next(err);
   }
-});
-
+})
 
 module.exports = router;

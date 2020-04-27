@@ -1,99 +1,93 @@
-/** Routes for users. */
-
 const express = require("express");
-const router = express.Router();
+const jsonschema = require("jsonschema");
 
-const { ensureCorrectUser, authRequired } = require("../middleware/auth");
+const router = new express.Router();
 
+const ExpressError = require("../helpers/expressError");
 const User = require("../models/user");
-const { validate } = require("jsonschema");
+const { ensureCorrectUser } = require("../helpers/authMiddleware");
 
-const { userNewSchema, userUpdateSchema } = require("../schemas");
+const postSchema = require("../schemas/userPostSchema.json");
+const patchSchema = require("../schemas/userPatchSchema.json");
 
-const createToken = require("../helpers/createToken");
-
-/** GET / => {users: [user, ...]} */
-
-router.get("/", authRequired, async function(req, res, next) {
+router.get("/", async (req, res, next) => {
   try {
-    const users = await User.findAll();
-    return res.json({ users });
-  } catch (err) {
+    let result = await User.all();
+    return res.json(result);
+  }
+  catch (err) {
     return next(err);
   }
 });
 
-/** GET /[username] => {user: user} */
-
-router.get("/:username", authRequired, async function(req, res, next) {
+router.get("/:username", async (req, res, next) => {
   try {
-    const user = await User.findOne(req.params.username);
-    return res.json({ user });
-  } catch (err) {
+    let user = await User.getByUsername(req.params.username);
+    return res.json(user);
+  }
+  catch (err) {
     return next(err);
   }
 });
 
-/** POST / {userdata}  => {token: token} 
- * Creates User / Registers new user
-*/
-
-router.post("/", async function(req, res, next) {
+router.post("/", async (req, res, next) => {
   try {
-    delete req.body._token;
-    const validation = validate(req.body, userNewSchema);
+    const validData = jsonschema.validate(req.body, postSchema);
 
-    if (!validation.valid) {
-      return next({
-        status: 400,
-        message: validation.errors.map(e => e.stack)
-      });
+    if (!validData.valid) {
+      let listOfErrors = validData.errors.map(error => error.stack);
+      throw new ExpressError(listOfErrors, 400);
     }
+    let user = new User(req.body);
+    await user.addToDb();
 
-    const newUser = await User.register(req.body);
-    const token = createToken(newUser);
-    return res.status(201).json({ token });
-  } catch (e) {
-    return next(e);
+    let token = user.createToken();
+
+    return res.status(201).json({ _token: token });
   }
-});
-
-/** PATCH /[handle] {userData} => {user: updatedUser} */
-
-router.patch("/:username", ensureCorrectUser, async function(req, res, next) {
-  try {
-    if ("username" in req.body || "is_admin" in req.body) {
-      return next({ status: 400, message: "Not allowed" });
-    }
-    await User.authenticate({
-      username: req.params.username,
-      password: req.body.password
-    });
-    delete req.body.password;
-    const validation = validate(req.body, userUpdateSchema);
-    if (!validation.valid) {
-      return next({
-        status: 400,
-        message: validation.errors.map(e => e.stack)
-      });
-    }
-
-    const user = await User.update(req.params.username, req.body);
-    return res.json({ user });
-  } catch (err) {
+  catch (err) {
     return next(err);
   }
 });
 
-/** DELETE /[handle]  =>  {message: "User deleted"}  */
-
-router.delete("/:username", ensureCorrectUser, async function(req, res, next) {
+router.post("/login", async (req, res, next) => {
   try {
-    await User.remove(req.params.username);
-    return res.json({ message: "User deleted" });
-  } catch (err) {
+    let user = await User.login(req.body);
+    let token = user.createToken();
+
+    return res.json({ _token: token });
+  }
+  catch(err) {
+    return next(err);
+  }
+})
+
+router.patch("/:username", ensureCorrectUser, async (req, res, next) => {
+  try {
+    const validData = jsonschema.validate(req.body, patchSchema);
+
+    if (!validData.valid) {
+      let listOfErrors = validData.errors.map(error => error.stack);
+      throw new ExpressError(listOfErrors, 400)
+    }
+    let result = await User.update(req.params.username, req.body);
+    return res.json(result);
+  }
+  catch (err) {
     return next(err);
   }
 });
+
+router.delete("/:username", ensureCorrectUser, async (req, res, next) => {
+  try {
+    let result = await User.deleteFromDb(req.params.username);
+    return res.json(result);
+  }
+  catch (err) {
+    return next(err);
+  }
+})
+
+
 
 module.exports = router;

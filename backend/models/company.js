@@ -1,156 +1,138 @@
-const db = require("../db");
-const sqlForPartialUpdate = require("../helpers/partialUpdate");
+const db = require('../db');
+const sqlForPartialUpdate = require('../helpers/partialUpdate');
+const ExpressError = require('../helpers/expressError');
+const { buildCompanyFilter } = require("../helpers/buildFilterQuery")
 
-
-/** Related functions for companies. */
 
 class Company {
-
-  /** Find all companies (can filter on terms in data). */
-
-  static async findAll(data) {
-    let baseQuery = `SELECT handle, name, description, logo_url FROM companies`;
-    let whereExpressions = [];
-    let queryValues = [];
-
-    if (+data.min_employees >= +data.max_employees) {
-      throw new Error("Min employees must be less than max employees");
-    }
-
-    // For each possible search term, add to whereExpressions and
-    // queryValues so we can generate the right SQL
-
-    if (data.min_employees) {
-      queryValues.push(+data.min_employees);
-      whereExpressions.push(`num_employees >= $${queryValues.length}`);
-    }
-
-    if (data.max_employees) {
-      queryValues.push(+data.max_employees);
-      whereExpressions.push(`num_employees <= $${queryValues.length}`);
-    }
-
-    if (data.search) {
-      queryValues.push(`%${data.search}%`);
-      whereExpressions.push(`name ILIKE $${queryValues.length}`);
-    }
-
-    if (whereExpressions.length > 0) {
-      baseQuery += " WHERE ";
-    }
-
-    // Finalize query and return results
-
-    let finalQuery = baseQuery + whereExpressions.join(" AND ") + " ORDER BY name";
-    const companiesRes = await db.query(finalQuery, queryValues);
-    return companiesRes.rows;
+  constructor({ handle, name, description, num_employees, logo_url }) {
+    this.handle = handle;
+    this.name = name;
+    this.description = description;
+    this.numEmployees = num_employees;
+    this.logoUrl = logo_url;
   }
 
-  /** Given a company handle, return data about company. */
-
-  static async findOne(handle) {
-    const companyRes = await db.query(
-        `SELECT handle, name, num_employees, description, logo_url
-            FROM companies
-            WHERE handle = $1`,
-        [handle]);
-
-    const company = companyRes.rows[0];
-
-    if (!company) {
-      const error = new Error(`There exists no company '${handle}'`);
-      error.status = 404;   // 404 NOT FOUND
-      throw error;
+  static async allByQueries(queries) {
+    if (queries.minEmployees > queries.maxEmployees) {
+      throw new ExpressError("Max value cannot be lower than min value", 400);
     }
+    let filterParams = buildCompanyFilter(queries);
 
-    const jobsRes = await db.query(
-        `SELECT id, title, salary, equity
-            FROM jobs 
-            WHERE company_handle = $1`,
-        [handle]);
-
-    company.jobs = jobsRes.rows;
-
-    return company;
-  }
-
-  /** Create a company (from data), update db, return new company data. */
-
-  static async create(data) {
-    const duplicateCheck = await db.query(
-        `SELECT handle 
-            FROM companies 
-            WHERE handle = $1`,
-        [data.handle]);
-
-    if (duplicateCheck.rows[0]) {
-      let duplicateError = new Error(
-          `There already exists a company with handle '${data.handle}`);
-      duplicateError.status = 409; // 409 Conflict
-      throw duplicateError
-    }
-
-    const result = await db.query(
-        `INSERT INTO companies 
-              (handle, name, num_employees, description, logo_url)
-            VALUES ($1, $2, $3, $4, $5) 
-            RETURNING handle, name, num_employees, description, logo_url`,
-        [
-          data.handle,
-          data.name,
-          data.num_employees,
-          data.description,
-          data.logo_url
-        ]);
-
-    return result.rows[0];
-  }
-
-  /** Update company data with `data`.
-   *
-   * This is a "partial update" --- it's fine if data doesn't contain
-   * all the fields; this only changes provided ones.
-   *
-   * Return data for changed company.
-   *
-   */
-
-  static async update(handle, data) {
-    let {query, values} = sqlForPartialUpdate(
-        "companies",
-        data,
-        "handle",
-        handle
+    const results = await db.query(
+      filterParams.sqlQueryString,
+      filterParams.values
     );
 
-    const result = await db.query(query, values);
-    const company = result.rows[0];
+    if (results.rows.length === 0) {
+      throw new ExpressError('No companies found', 404);
+    }
+
+    let companies = results.rows;
+
+    return { companies };
+  }
+
+  static async getByHandle(handle) {
+    const results = await db.query(
+      `SELECT
+          handle,
+          name,
+          description,
+          num_employees,
+          logo_url,
+          j.id,
+          j.title,
+          j.salary,
+          j.equity,
+          j.date_posted
+        FROM companies
+        LEFT JOIN jobs j
+        ON handle = j.company_handle
+        WHERE handle = $1`,
+      [handle]
+    );
+
+    const company = results.rows[0];
+    const jobs = results.rows;
 
     if (!company) {
-      let notFound = new Error(`There exists no company '${handle}`);
-      notFound.status = 404;
-      throw notFound;
+      throw new ExpressError('Company not found!', 404);
     }
 
-    return company;
+    return {
+      company: {
+        handle: company.handle,
+        name: company.name,
+        description: company.description,
+        num_employees: company.num_employees,
+        logo_url: company.logo_url,
+        jobs: jobs.map(r => ({
+          id: r.id,
+          title: r.title,
+          salary: r.salary,
+          equity: r.equity,
+          date_posted: r.date_posted
+        }))
+      }
+    };
   }
 
-  /** Delete given company from database; returns undefined. */
 
-  static async remove(handle) {
-    const result = await db.query(
-        `DELETE FROM companies 
-          WHERE handle = $1 
-          RETURNING handle`,
-        [handle]);
+  static async update(handle, items) {
+    let queryParams = sqlForPartialUpdate("companies", items, "handle", handle);
 
-    if (result.rows.length === 0) {
-      let notFound = new Error(`There exists no company '${handle}`);
-      notFound.status = 404;
-      throw notFound;
+    const update = await db.query(
+      queryParams.query,
+      queryParams.values
+    );
+
+    if (update.rows.length === 0) {
+      throw new ExpressError('Company does not exist', 404);
     }
+
+    let company = update.rows[0];
+
+    return { company };
   }
+
+  async addToDb() {
+    await db.query(
+      `INSERT INTO companies
+          (handle,
+          name,
+          description,
+          num_employees,
+          logo_url)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING
+          handle,
+          name,
+          description,
+          num_employees AS "numEmployees",
+          logo_url AS "logoUrl"`,
+      [this.handle,
+      this.name,
+      this.description,
+      this.numEmployees,
+      this.logoUrl]
+    );
+  }
+
+  static async deleteFromDb(handle) {
+    const deleted = await db.query(
+      `DELETE FROM companies
+        WHERE handle = $1`,
+      [handle]
+    );
+
+    if (deleted.rowCount === 0) {
+      throw new ExpressError('Company does not exist', 404);
+    }
+
+    return { message: "Company successfully deleted" };
+  }
+
 }
-
 
 module.exports = Company;
