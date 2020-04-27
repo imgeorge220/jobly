@@ -67,10 +67,10 @@ class JoblyApi {
     return res;
   }
 
-  static async apply(jobId, username) {
+  static async apply(jobId, _token) {
     let res = await this.request(
       `jobs/${jobId}/apply`,
-      { state: "applied", username },
+      { state: "applied", _token },
       "post"
     );
     return res;

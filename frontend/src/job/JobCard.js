@@ -6,7 +6,7 @@ import './JobCard.css';
 
 const JobCard = ({ job }) => {
   const [hasApplied, setHasApplied] = useState(false);
-  const username = localStorage.getItem('username');
+  const _token = localStorage.getItem('_token');
 
   useEffect(() => {
     if (job.state === 'applied') setHasApplied(true);
@@ -15,7 +15,7 @@ const JobCard = ({ job }) => {
 
   const handleApply = async evt => {
     evt.preventDefault();
-    await JoblyApi.apply(job.id, username);
+    await JoblyApi.apply(job.id, _token);
     setHasApplied(true);
   }
 
