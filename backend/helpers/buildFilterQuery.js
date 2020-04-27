@@ -106,13 +106,15 @@ function buildJobFilter(queries) {
   }
 
   let sqlQueryString = `SELECT
-  id,
-  title,
-  company_handle,
-  salary, 
-  equity, 
+  j.id,
+  j.title,
+  j.company_handle,
+  c.name AS company_name,
+  j.salary, 
+  j.equity, 
   a.state 
-  FROM jobs 
+  FROM companies  AS c
+  LEFT OUTER JOIN jobs AS j on j.company_handle = c.handle
   LEFT OUTER JOIN applications AS a on a.job_id = id
   ${whereStatement}
   ORDER BY date_posted DESC`

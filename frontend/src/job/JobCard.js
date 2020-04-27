@@ -26,6 +26,7 @@ const JobCard = ({ job }) => {
           <Row>
             <Col>
               <h4 >{job.title}</h4>
+              <i >{job.company_name}</i>
             </Col>
           </Row>
           <Row>

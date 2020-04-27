@@ -81,7 +81,6 @@
     },
     "_token": {
       "$id": "#/properties/_token",
-      "type": "string",
       "title": "The Token Schema",
       "default": "",
       "examples": [
