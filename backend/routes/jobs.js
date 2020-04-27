@@ -13,7 +13,7 @@ const applicationSchema = require("../schemas/applicationSchema.json");
 
 router.get("/", ensureLoggedIn, async (req, res, next) => {
   try {
-    let result = await Job.allByQueries(req.query);
+    let result = await Job.allByQueries(req.query, req.user.username);
     return res.json(result);
   }
   catch (err) {

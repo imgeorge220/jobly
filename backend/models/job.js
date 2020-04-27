@@ -12,8 +12,8 @@ class Job {
     this.company_handle = company_handle;
   }
 
-  static async allByQueries(queries) {
-    let filterParams = buildJobFilter(queries);
+  static async allByQueries(queries, username) {
+    let filterParams = buildJobFilter(queries, username);
 
     const results = await db.query(
       filterParams.sqlQueryString,

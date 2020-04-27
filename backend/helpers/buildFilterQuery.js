@@ -66,10 +66,10 @@ function buildCompanyFilter(queries) {
  *  -query: SQL query string of filters
  *  -value: array of sanitized values for query
  */
-function buildJobFilter(queries) {
+function buildJobFilter(queries, username) {
   let queryArr = [];
-  let values = [];
-  let index = 1;
+  let values = [username];
+  let index = 2;
 
   if (queries.search) {
     let searchTerm = queries.search.split('+').join(' ');
@@ -115,7 +115,7 @@ function buildJobFilter(queries) {
   a.state 
   FROM companies  AS c
   LEFT OUTER JOIN jobs AS j on j.company_handle = c.handle
-  LEFT OUTER JOIN applications AS a on a.job_id = id
+  LEFT OUTER JOIN applications AS a on a.job_id = id AND username = $1
   ${whereStatement}
   ORDER BY date_posted DESC`
 
