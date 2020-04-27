@@ -45,9 +45,11 @@ class Company {
           j.title,
           j.salary,
           j.equity,
-          j.date_posted
+          j.date_posted,
+          a.state
         FROM companies
         LEFT JOIN jobs j
+        LEFT OUTER JOIN applications AS a on a.job_id = id
         ON handle = j.company_handle
         WHERE handle = $1`,
       [handle]
@@ -72,7 +74,8 @@ class Company {
           title: r.title,
           salary: r.salary,
           equity: r.equity,
-          date_posted: r.date_posted
+          date_posted: r.date_posted,
+          state: r.state,
         }))
       }
     };
