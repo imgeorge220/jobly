@@ -7,12 +7,14 @@ import {Container, Row, Col} from 'react-bootstrap';
 const JobList = () => {
 
   const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   //opportunity to refactor getCompanies() outside of useEffect & searchCompanies
   useEffect(() => {
     const getJobs = async () => {
       const jobsResp = await JoblyApi.getJobs();
-      setJobs(jobsResp)
+      setJobs(jobsResp);
+      setLoading(false);
     }
     getJobs();
   }, []);
@@ -30,12 +32,14 @@ const JobList = () => {
     : <h3>No companies match that search. Please try again</h3>
 
 
+  const loadingJSX = <h3>Loading...</h3>
+
   return (
     <Container>
       <Row>
         <Col md={{ span: 8, offset: 2 }}>
           <SearchBar handleSearch={searchJobs} />
-          {jobsJSX}
+          {loading ? loadingJSX : jobsJSX}
         </Col>
       </Row>
     </Container>
