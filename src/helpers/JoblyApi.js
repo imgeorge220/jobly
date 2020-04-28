@@ -10,7 +10,8 @@ class JoblyApi {
     try {
       return (await axios({
         method: verb,
-        url: `http://localhost:5000/${endpoint}`,
+        // url: `http://localhost:5000/${endpoint}`,
+        url: `https://jobly-backend-gcg.herokuapp.com/${endpoint}`,
         [verb === "get" ? "params" : "data"]: paramsOrData
       })).data;
       // axios sends query string data via the "params" key,
