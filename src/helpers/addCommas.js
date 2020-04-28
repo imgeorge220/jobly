@@ -21,9 +21,9 @@ function addCommas(num) {
     })
     .reverse()
     .join('');
-  
+
   // Return result and add fraction back in if it exists.
-  return fraction ? formattedIntegerString  + `.${fraction}` : formattedIntegerString;
+  return fraction ? formattedIntegerString + `.${fraction}` : formattedIntegerString;
 }
 
-module.exports = addCommas;
+export default addCommas;
